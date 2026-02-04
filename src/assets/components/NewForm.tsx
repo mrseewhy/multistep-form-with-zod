@@ -1,152 +1,138 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import React from 'react'
-import { useForm, type SubmitHandler, Controller } from 'react-hook-form'
+import { useForm, type SubmitHandler, Controller, type FieldPath } from 'react-hook-form'
 import { z } from 'zod'
-import ct from 'countries-and-timezones'
-import Select from 'react-select';
+import ct, { type Country, type Timezone } from 'countries-and-timezones'
+import Select, { type SingleValue } from 'react-select'
 
-const sizedata = ['1–5', '6–20', '21–50', '50+']
+const sizedata = ['1–5', '6–20', '21–50', '50+'] as const
+const web_types = ['Landing Page', 'Marketing Site', 'Ecommerce', 'Blog'] as const
 
 const formSchema = z.object({
-    accountType: z.enum(['individual', 'startup', 'established business', 'agency/partner'], 'Invalid option, please select a valid one from the options above!'),
-    fullName: z.string('Full Name cannot be empty').min(4, 'Your full name must be at least 4 characters long'),
-    email: z.email('Please enter a valid email'),
-    country: z.string('Please select a country').min(1, 'Please select a country'),
-    timezone: z.string('Please select timezone').min(1, 'Please select timezone'),
-    companyName: z.string().min(3, 'Your company must be at least 4 characters long').optional(),
-    companySize: z.enum(sizedata, 'Invalid option, please select a valid one from the options above!').optional(),
-}).superRefine((data, ctx) => {
-    if (data.accountType !== 'individual') {
-        if (!data.companySize || !sizedata.includes(data.companySize)) {
-            ctx.addIssue({
-                path: ['companySize'],
-                code: z.ZodIssueCode.custom,
-                message: 'Company size is required for non-individual accounts',
-            });
-        }
-
-        if (!data.companyName || data.companyName.trim() === '') {
-            ctx.addIssue({
-                path: ['companyName'],
-                code: z.ZodIssueCode.custom,
-                message: 'Company name is required for non-individual accounts',
-            });
-        }
-    }
-});
+    accountType: z.enum(
+        ['individual', 'startup', 'established business', 'agency/partner'],
+        { message: 'Invalid option, please select a valid one from the options above!' }
+    ),
+    fullName: z.string().min(4, 'Your full name must be at least 4 characters long'),
+    email: z.string().email('Please enter a valid email'),
+    country: z.string().min(1, 'Please select a country'),
+    timezone: z.string().min(1, 'Please select timezone'),
+    companyName: z.string().min(3, 'Your company must be at least 4 characters long').optional().nullable(),
+    companySize: z.enum(sizedata).optional().nullable(),
+    help: z.array(z.string()).min(1, 'Error! select an item'),
+    websitetype: z.enum(web_types).optional(),
+    roleCount: z.number().gte(1, 'Number must be 1 or more').optional().nullable(),
+    authRequired: z.enum(['yes', 'no']).optional().nullable(),
+})
 
 type FormData = z.infer<typeof formSchema>
 
-
 const NewForm = () => {
+    const [formData, setFormData] = React.useState<Partial<FormData>>({})
+    const [timeZones, setTimeZones] = React.useState<Timezone[]>([])
 
-    //form data that is saved 
-    const [formData, setFormData] = React.useState<FormData>({})
-
-    const [timeZones, setTimeZones] = React.useState([])
-
-    //All countries
-    const countryList = React.useMemo(() => {
-        return Object.values(ct.getAllCountries())
-            .sort((a, b) => a.name.localeCompare(b.name))
+    const countryList = React.useMemo<Country[]>(() => {
+        return Object.values(ct.getAllCountries()).sort((a, b) =>
+            a.name.localeCompare(b.name)
+        )
     }, [])
 
-    //options for react select
     const countryOptions = countryList.map(country => ({
         value: country.name,
-        label: country.name + ' (' + country.id + ') ',
+        label: `${country.name} (${country.id})`,
     }))
 
-
-
-    //step fields to know what to verif per step
-    const stepFields = {
+    const stepFields: Record<number, FieldPath<FormData>[]> = {
         1: ['accountType'],
         2: ['fullName', 'email', 'country', 'timezone', 'companyName', 'companySize'],
-        3: ['projectType', 'scope'],
+        3: ['help', 'websitetype', 'roleCount', 'authRequired'],
     }
 
-    //page heading for each page
-    const pageHeadings = ['Account Type', 'Basic Identity', 'Project Type & Scope', 'Budget & Timeline Qualification', 'Technical Preferences', 'Communication & Availability', 'Final Review & Submission', 'Thank You']
+    const pageHeadings = [
+        'Account Type',
+        'Basic Identity',
+        'Project Type & Scope',
+        'Budget & Timeline Qualification',
+        'Technical Preferences',
+        'Communication & Availability',
+        'Final Review & Submission',
+        'Thank You',
+    ]
 
-    //Each step
-    const steps: number[] = [1, 2, 3, 4, 5, 6, 7, 8]
+    const steps = [1, 2, 3, 4, 5, 6, 7, 8]
+    const [currentStep, setCurrentStep] = React.useState(1)
 
-    //current Step
-    const [currentStep, setCurrentStep] = React.useState<number>(1)
-
-
-    //Form details from react form hook
-    const { register, handleSubmit, watch, getValues, control, trigger, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
+    const {
+        register,
+        handleSubmit,
+        watch,
+        getValues,
+        control,
+        trigger,
+        setValue,
+        formState: { errors },
+    } = useForm<FormData>({
         resolver: zodResolver(formSchema),
         defaultValues: formData,
         mode: 'onTouched',
-        reValidateMode: 'onChange'
+        reValidateMode: 'onChange',
     })
 
-    //Submit details to local host or local storage 
-    const formSubmit: SubmitHandler<FormData> = (data) => {
-        console.log(data, 'now', getValues())
+    const formSubmit: SubmitHandler<FormData> = data => {
+        console.log(data, getValues())
     }
 
-    //Inputs to watch so they can be used conditionally or for error
-    const accountType = watch('accountType');
+    const accountType = watch('accountType')
     const country = watch('country')
+    const help = watch('help') ?? []
 
-
-    //Next function this goes to the next page 
     const handleNext = async () => {
-        const isValid = await trigger(stepFields[currentStep])
-
-        if (!isValid) {
-            return
-        }
+        const isValid = await trigger(stepFields[currentStep] ?? [])
+        if (!isValid) return
 
         const value = getValues()
 
-        if (!accountType) return
+        setFormData(prev => ({ ...prev, ...value }))
         if (currentStep < steps.length) {
-            setFormData(prev => {
-                const merged = { ...prev, ...value }
-                console.log('saved snapshot', merged)
-                return merged
-            })
             setCurrentStep(prev => prev + 1)
         }
     }
 
-    //goes to the previous page
     const handleBack = () => {
-        if (currentStep > 1) {
-            setCurrentStep(prev => prev - 1)
-        }
+        if (currentStep > 1) setCurrentStep(prev => prev - 1)
     }
 
-    //After the  thank you page on page 8 this appears and restarts the form
-    const handleBackToStart = () => {
-        setCurrentStep(1)
-    }
+    const handleBackToStart = () => setCurrentStep(1)
+
     React.useEffect(() => {
         if (!country) return
 
-        const country_to_timezone = countryList.find(
-            selectedCountry => selectedCountry.name === country
-        )
+        const selected = countryList.find(c => c.name === country)
+        if (!selected) return
 
-        if (!country_to_timezone) return
-
-        const tt = Object.values(
-            ct.getTimezonesForCountry(country_to_timezone.id)
-        )
-
-        setTimeZones(tt)
-
-
-
+        const tzs = Object.values(ct.getTimezonesForCountry(selected.id))
+        setTimeZones(tzs)
     }, [country, countryList])
 
+    React.useEffect(() => {
+        if (accountType === 'individual') {
+            setValue('companyName', undefined)
+            setValue('companySize', undefined)
+        }
+    }, [accountType, setValue])
 
+    React.useEffect(() => {
+        if (!help.includes('website')) {
+            setValue('websitetype', undefined)
+        }
+    }, [help, setValue])
 
+    React.useEffect(() => {
+        if (!help.includes('web app') && !help.includes('mobile app')) {
+            setValue('roleCount', undefined)
+            setValue('authRequired', undefined)
+        }
+    }, [help, setValue])
 
     return (
         <div className='w-full min-h-screen grid place-items-center'>
@@ -284,6 +270,7 @@ const NewForm = () => {
                                                         <div className='flex flex-col gap-1 w-1/2'>
                                                             <label htmlFor='timezone'>Select Timezone: </label>
                                                             <select {...register('timezone')} className='h-10 w-full border border-purple-300 rounded-md px-4 py-2 outline-0 focus:ring-2 ring-purple-500' >
+                                                                <option value="">--select time zone --</option>
                                                                 {timeZones.map((tz, index) => (
                                                                     <option key={tz.id + index} value={tz.name}>
                                                                         {tz.name} – UTC {tz.dstOffsetStr}
@@ -328,7 +315,64 @@ const NewForm = () => {
 
                                             </div>
                                         }
-                                        {currentStep === 3 && <div> This is current step 3 {formData.accountType} </div>}
+                                        {currentStep === 3 &&
+                                            <div>
+                                                <div>
+                                                    <fieldset>
+                                                        <legend> What do you need help with? </legend>
+                                                        <div className='flex flex-row gap-4'>
+                                                            <label> <input {...register('help')} type='checkbox' value='website' className='mr-1' />Website</label>
+                                                            <label> <input {...register('help')} type='checkbox' value='web app' className='mr-1' />Web App</label>
+                                                            <label> <input {...register('help')} type='checkbox' value='mobile app' className='mr-1' />Mobile App</label>
+                                                            <label> <input {...register('help')} type='checkbox' value='branding' className='mr-1' />Branding</label>
+                                                            <label> <input {...register('help')} type='checkbox' value='ongoing support' className='mr-1' />Ongoing Support</label>
+                                                        </div>
+                                                        <span className='text-xs h-4 text-red-600'>
+                                                            {errors.help && <span>{errors.help.message}</span>}
+                                                        </span>
+
+                                                    </fieldset>
+                                                </div>
+                                                {help && help.includes('website') &&
+                                                    <div className='flex flex-col gap-1 w-1/2'>
+                                                        <label htmlFor='websitetype'>Website Type: </label>
+                                                        <select {...register('websitetype')} className='h-10 w-full border border-purple-300 rounded-md px-4 py-2 outline-0 focus:ring-2 ring-purple-500' >
+                                                            <option value="">--select website type --</option>
+                                                            {web_types.map((webType, index) => <option key={index + 1} value={webType}>{webType}</option>)}
+                                                        </select>
+
+                                                        <span className='text-xs h-4 text-red-600'>
+                                                            {errors.websitetype && <span>{errors.websitetype.message}</span>}
+                                                        </span>
+                                                    </div>}
+                                                {help && (help.includes('web app') || help.includes('mobile app')) &&
+                                                    <div>
+                                                        <p className='mt-2 text-xl mb-2 text-purple-950'>For Web Apps and Mobile Apps</p>
+
+                                                        <div className='w-full flex gap-4'>
+                                                            <div className='flex flex-col gap-1 w-1/2'>
+                                                                <label htmlFor='roleCount'>User roles count:</label>
+                                                                <input id='roleCount' {...register('roleCount', { valueAsNumber: true })} type='number' className='h-10 w-full border border-purple-300 rounded-md p-2 outline-0 focus:ring-2 ring-purple-500 ' />
+                                                                <span className='text-xs h-4 text-red-600'>
+                                                                    {errors.roleCount && <span>{errors.roleCount.message}</span>}
+                                                                </span>
+                                                            </div>
+                                                            <div className='flex flex-col gap-1 w-1/2'>
+                                                                <label htmlFor='authRequired'>Authentication required? </label>
+                                                                <select {...register('authRequired')} className='h-10 w-full border border-purple-300 rounded-md px-4 py-2 outline-0 focus:ring-2 ring-purple-500' >
+                                                                    <option value="">--select company size--</option>
+                                                                    <option value="yes">Yes</option>
+                                                                    <option value="no">No</option>
+
+                                                                </select>
+                                                                <span className='text-xs h-4 text-red-600'>
+                                                                    {errors.authRequired && <span>{errors.authRequired.message}</span>}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>}
                                         {currentStep === 4 && <div> This is current step 4 {formData.accountType} </div>}
                                         {currentStep === 5 && <div> This is current step 5 {formData.accountType} </div>}
                                         {currentStep === 6 && <div> This is current step 6 {formData.accountType} </div>}
